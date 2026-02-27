@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"encoding/base64"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -95,7 +97,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	imageExt := getExt(mediaType)
-	thumbnailSubPath := fmt.Sprintf("%s.%s", videoID, imageExt)
+	key := make([]byte, 32)
+	rand.Read(key)
+	keyStr := base64.RawURLEncoding.EncodeToString(key)
+	thumbnailSubPath := fmt.Sprintf("%s.%s", keyStr, imageExt)
 	thumbnailPath := filepath.Join(cfg.assetsRoot, thumbnailSubPath)
 	thumbnailFile, err := os.Create(thumbnailPath)
 	if err != nil {
@@ -108,7 +113,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s.%s", cfg.port, videoID.String(), imageExt)
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s.%s", cfg.port, keyStr, imageExt)
 	videoData.ThumbnailURL = &thumbnailURL
 	err = cfg.db.UpdateVideo(videoData)
 	if err != nil {
