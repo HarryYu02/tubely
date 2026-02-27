@@ -75,6 +75,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	fileData, fileHeader, err := r.FormFile("thumbnail")
+	defer fileData.Close()
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Thumbnail data cannot be read", err)
 		return
@@ -103,6 +104,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	thumbnailSubPath := fmt.Sprintf("%s.%s", keyStr, imageExt)
 	thumbnailPath := filepath.Join(cfg.assetsRoot, thumbnailSubPath)
 	thumbnailFile, err := os.Create(thumbnailPath)
+	defer thumbnailFile.Close()
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Thumbnail cannot be saved", err)
 		return
