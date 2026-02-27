@@ -28,6 +28,21 @@ func getExt(contentType string) string {
 	return exts[0][1:]
 }
 
+func validateMimeType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	switch mediaType {
+	case "image/jpeg":
+		fallthrough
+	case "image/png":
+		return true
+	default:
+		return false
+	}
+}
+
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
@@ -70,6 +85,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	if videoData.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "You are not the video owner", err)
+		return
+	}
+
+	isValidThumbnail := validateMimeType(mediaType)
+	if !isValidThumbnail {
+		respondWithError(w, http.StatusBadRequest, "Media type not allowed", err)
 		return
 	}
 
