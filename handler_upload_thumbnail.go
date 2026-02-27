@@ -1,15 +1,32 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
 )
+
+func getExt(contentType string) string {
+	// Content-Type often includes parameters like "text/html; charset=utf-8"
+	// We need to strip everything after the semicolon.
+	mediaType := strings.Split(contentType, ";")[0]
+
+	exts, err := mime.ExtensionsByType(mediaType)
+	if err != nil || len(exts) == 0 {
+		return ""
+	}
+
+	// Returns the first extension (e.g., "html")
+	return exts[0][1:]
+}
 
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
 	videoIDString := r.PathValue("videoID")
@@ -38,35 +55,50 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	err = r.ParseMultipartForm(maxMemory)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Form data cannot be parsed", err)
+		return
 	}
 	fileData, fileHeader, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Thumbnail data cannot be read", err)
+		return
 	}
 	mediaType := fileHeader.Header.Get("Content-Type")
-	imageData, err := io.ReadAll(fileData)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Thumbnail cannot be read", err)
-	}
 	videoData, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Video cannot be retrieved", err)
+		return
 	}
 	if videoData.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "You are not the video owner", err)
+		return
 	}
 
-	encodedImageData := base64.StdEncoding.EncodeToString(imageData)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encodedImageData)
-	videoData.ThumbnailURL = &dataURL
+	imageExt := getExt(mediaType)
+	thumbnailSubPath := fmt.Sprintf("%s.%s", videoID, imageExt)
+	thumbnailPath := filepath.Join(cfg.assetsRoot, thumbnailSubPath)
+	thumbnailFile, err := os.Create(thumbnailPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Thumbnail cannot be saved", err)
+		return
+	}
+	_, err = io.Copy(thumbnailFile, fileData)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Thumbnail cannot be saved", err)
+		return
+	}
+
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s.%s", cfg.port, videoID.String(), imageExt)
+	videoData.ThumbnailURL = &thumbnailURL
 	err = cfg.db.UpdateVideo(videoData)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Video cannot be updated", err)
+		return
 	}
 
 	videoBytes, err := json.Marshal(videoData)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Video cannot be marsalled", err)
+		return
 	}
 
 	respondWithJSON(w, http.StatusOK, videoBytes)
