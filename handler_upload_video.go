@@ -3,18 +3,14 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -28,28 +24,6 @@ func validateVideoType(contentType string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	if video.VideoURL != nil {
-		videoURL := *video.VideoURL
-		videoURLSplit := strings.Split(videoURL, ",")
-		if len(videoURLSplit) != 2 {
-			return video, fmt.Errorf("Invalid video URL")
-		}
-		bucket := videoURLSplit[0]
-		key := videoURLSplit[1]
-
-		presignedURL, err := generatePresignedURL(cfg.s3Client, bucket, key, time.Minute * 5)
-		if err != nil {
-			return video, err
-		}
-		fmt.Printf("presignedURL: %v\n", presignedURL)
-		video.VideoURL = &presignedURL
-		return video, nil
-	} else {
-		return video, nil
 	}
 }
 
@@ -148,7 +122,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		prefix = "portrait"
 	}
 	fullKeyStr := fmt.Sprintf("%s/%s", prefix, keyStrWithExt)
-	fmt.Printf("fullKeyStr: %v\n", fullKeyStr)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket: &cfg.s3Bucket,
 		Key: &fullKeyStr,
@@ -159,7 +132,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Video cannot be saved to aws", err)
 		return
 	}
-	videoURL := fmt.Sprintf("%s,%s", cfg.s3Bucket, fullKeyStr)
+	videoURL := fmt.Sprintf("%s/%s", cfg.s3CfDistribution, fullKeyStr)
 	videoData.VideoURL = &videoURL
 	err = cfg.db.UpdateVideo(videoData)
 	if err != nil {
@@ -167,16 +140,5 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoRes, err := cfg.dbVideoToSignedVideo(videoData)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Video cannot be signed", err)
-		return
-	}
-	videoBytes, err := json.Marshal(videoRes)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Video cannot be marsalled", err)
-		return
-	}
-
-	respondWithJSON(w, http.StatusOK, videoBytes)
+	respondWithJSON(w, http.StatusOK, videoData)
 }

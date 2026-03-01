@@ -70,14 +70,14 @@ func main() {
 		log.Fatal("S3_REGION environment variable is not set")
 	}
 
-	s3CfDistribution := os.Getenv("S3_CF_DISTRO")
-	if s3CfDistribution == "" {
-		log.Fatal("S3_CF_DISTRO environment variable is not set")
-	}
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("PORT environment variable is not set")
+	}
+
+	s3CfDistribution := os.Getenv("S3_CF_DISTRIBUTION")
+	if s3CfDistribution == "" {
+		log.Fatal("S3_CF_DISTRIBUTION environment variable is not set")
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(s3Region))
